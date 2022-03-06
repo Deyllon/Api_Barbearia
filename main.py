@@ -59,7 +59,23 @@ def barbeiro(barbeiro_nome: str):
 
 @app.put('/atualiza_barbeiro/{barbeiro_nome}', response_model=Barbeiros, status_code=status.HTTP_200_OK)
 def atualizar_barbeiro(barbeiro_nome: str, barbeiro:Barbeiros):
-    pass
+    barbeiro_a_atualizar = db.query(Barbeiro).filter(Barbeiro.nome == barbeiro_nome).first()
+    if barbeiro_a_atualizar is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Barbeiro não encontrado')
+    barbeiro_a_atualizar.horario_de_entrada = barbeiro.horario_de_entrada
+    barbeiro_a_atualizar.horario_de_saida = barbeiro.horario_de_saida
+    barbeiro_a_atualizar.ativo = barbeiro.ativo
+    db.commit()
+    return barbeiro_a_atualizar
+
+@app.delete('/deleta_barbeiro/{barbeiro_nome}', response_model=Barbeiros, status_code=status.HTTP_200_OK)
+def deleta_barbeiro(barbeiro_nome: str):
+    barbeiro_a_deletar = db.query(Barbeiro).filter(Barbeiro.nome == barbeiro_nome).first()
+    if barbeiro_a_deletar is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Barbeiro não encontrado")
+    db.delete(barbeiro_a_deletar)
+    db.commit()
+    return barbeiro_a_deletar
 
 
 @app.post('/cria_hora_marcada', response_model=Horario_Marcado, status_code=status.HTTP_201_CREATED)
@@ -84,3 +100,40 @@ def cria_horario(hora_marcada:Horario_Marcado):
     db.add(hora_marcada)
     db.commit()
     return hora_marcada
+
+@app.get('/hora_marcada', response_model=List[Horario_Marcado], status_code=status.HTTP_200_OK)
+def ver_horas_marcadas():
+    horarios = db.query(Hora_Marcada).order_by(Hora_Marcada.horario.desc()).all()
+    return horarios
+
+@app.get('/hora_marcada/{cliente_nome}', response_model=List[Horario_Marcado], status_code=status.HTTP_200_OK)
+def ver_hora_marcada_do_cliente(cliente_nome: str):
+    horario_do_cliente = db.query(Hora_Marcada).order_by(Hora_Marcada.horario.desc()).filter(Hora_Marcada.cliente == cliente_nome).all()
+    if not horario_do_cliente:
+        raise HTTPException(status_code=400, detail='O cliente não tem nenhum horario marcado') 
+    return horario_do_cliente
+
+
+@app.get('/hora_marcada_barbeiro/{barbeiro_nome}', response_model=List[Horario_Marcado], status_code=status.HTTP_200_OK)
+def ver_hora_marcado_do_barbeiro(barbeiro_nome: str):
+    barbeiro = db.query(Barbeiro).filter(Barbeiro.nome == barbeiro_nome).first()
+    horario_do_barbeiro = db.query(Hora_Marcada).order_by(Hora_Marcada.horario.desc()).filter(Hora_Marcada.barbeiro == barbeiro.id).all()
+    if not horario_do_barbeiro:
+        raise HTTPException(status_code=400, detail='O barbeiro não tem nenhum horario')
+    return horario_do_barbeiro
+
+@app.put('/atualiza_horario/{cliente_nome}', response_model=Horario_Marcado, status_code=status.HTTP_200_OK)
+def atualizar_horario(cliente_nome: str,horario_marcado:Horario_Marcado):
+    horario_a_atualizar = db.query(Hora_Marcada).order_by(Hora_Marcada.horario.desc()).filter(Hora_Marcada.cliente == cliente_nome).first()
+    print(horario_a_atualizar)
+    horario_a_atualizar.horario = horario_marcado.horario.strftime('%Y-%m-%d %H:%M')
+    horario_a_atualizar.barbeiro = horario_marcado.barbeiro
+    db.commit()
+    return horario_a_atualizar
+
+@app.delete('/deletar_horario/{cliente_nome}/{horario}', response_model=Horario_Marcado, status_code=status.HTTP_200_OK)
+def deletar_horario(cliente_nome: str, horario: str):
+    horario_a_deletar = db.query(Hora_Marcada).filter(Hora_Marcada.cliente == cliente_nome, Hora_Marcada.horario == horario ).first()
+    db.delete(horario_a_deletar)
+    db.commit()
+    return horario_a_deletar
