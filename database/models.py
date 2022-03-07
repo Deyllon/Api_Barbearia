@@ -1,3 +1,4 @@
+from tkinter import CASCADE
 from .data import Base
 from sqlalchemy import ForeignKey, Integer, String, Boolean, Column, DateTime, Time 
 
