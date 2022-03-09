@@ -1,15 +1,28 @@
 import datetime
 from time import strftime
-from fastapi import FastAPI, status, HTTPException
+from fastapi import FastAPI, status, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional, List
 from database.data import SessionLocal
-from database.models import Barbeiro, Hora_Marcada
+from database.models import Barbeiro, Hora_Marcada, Usuario_Model
 from validation import apagar_horarios, horario_existe, valida_horario,valida_barbeiro, valida_hora_marcada, valida_horario_do_cliente,valida_horario_do_barbeiro, validar_barbeiro_a_deletar, valida_criacao_barbeiro, valida_atualizacao_barbeiro, barbeiro_existe, validar_horario_a_deletar
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 
 
 
 app = FastAPI()
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl='token')
+
+class Usuario(BaseModel):
+    id: Optional[int] = None
+    usuario : str
+    senha : str
+    
+    def vericar_senha(self, senha):
+        return self.senha == senha
+    class Config:
+        orm_mode = True
 
 class Barbeiros(BaseModel):
     id: Optional[int]= None
@@ -30,12 +43,48 @@ class Horario_Marcado(BaseModel):
     
     class Config:
         orm_mode = True
+  
         
 db= SessionLocal()
     
+def autenticar_usuario(usuario: str, senha: str):
+    db_usuario = db.query(Usuario_Model).filter(Usuario_Model.usuario == usuario).first()
+    if not db_usuario:
+        return False
+    if not db_usuario.vericar_senha(senha):
+        return False
+    return db_usuario
+
+
+@app.post('/token')
+def gerar_token(formulario: OAuth2PasswordRequestForm = Depends()):
+    usuario = autenticar_usuario(formulario.username, formulario.password)
+    
+    if not usuario:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Usuario não encontrado')
+    
+    token = usuario
+    return {"token_de_acesso": token, 'tipo_do_token': 'bearer'}
+ 
+#Metodo HTTP para o modelo Usuario
+    
+@app.post('/cria_usuario', response_model=Usuario)
+def cria_usuario(usuario: Usuario):
+    db_usuario = db.query(Usuario_Model).filter(Usuario_Model.usuario == usuario.usuario).first()
+    if not db_usuario is None:
+        raise HTTPException(status_code=400, detail='Usuario já existe')
+    usuario = Usuario_Model(
+        usuario = usuario.usuario,
+        senha = usuario.senha
+    )
+    db.add(usuario)
+    db.commit()
+    return usuario
+  
+#Metodos HTTP para o modelo Barbeiro
     
 @app.post('/cria_barbeiro', response_model=Barbeiros, status_code=status.HTTP_201_CREATED)
-def cria_barbeiro(barbeiro:Barbeiros):
+def cria_barbeiro(barbeiro:Barbeiros, usuario= Depends(oauth2_scheme)):
     db_barbeiro = db.query(Barbeiro).filter(Barbeiro.nome== barbeiro.nome).first()
     
     valida_criacao_barbeiro(db_barbeiro)
@@ -53,7 +102,7 @@ def cria_barbeiro(barbeiro:Barbeiros):
     return barbeiro
 
 @app.get('/barbeiro', response_model=List[Barbeiros], status_code=status.HTTP_200_OK)
-def barbeiros():
+def barbeiros(usuario= Depends(oauth2_scheme)):
     barbeiros = db.query(Barbeiro).all()
     
     barbeiro_existe(barbeiros)
@@ -61,7 +110,7 @@ def barbeiros():
     return barbeiros
 
 @app.get('/barbeiro/{barbeiro_nome}', response_model=Barbeiros, status_code=status.HTTP_200_OK)
-def barbeiro(barbeiro_nome: str):
+def barbeiro(barbeiro_nome: str, usuario= Depends(oauth2_scheme)):
     barbeiro = db.query(Barbeiro).filter(Barbeiro.nome ==  barbeiro_nome).first()
     
     valida_barbeiro(barbeiro)
@@ -69,7 +118,7 @@ def barbeiro(barbeiro_nome: str):
     return barbeiro
 
 @app.put('/atualiza_barbeiro/{barbeiro_nome}', response_model=Barbeiros, status_code=status.HTTP_200_OK)
-def atualizar_barbeiro(barbeiro_nome: str, barbeiro:Barbeiros):
+def atualizar_barbeiro(barbeiro_nome: str, barbeiro:Barbeiros, usuario= Depends(oauth2_scheme)):
     barbeiro_a_atualizar = db.query(Barbeiro).filter(Barbeiro.nome == barbeiro_nome).first()
     
     valida_atualizacao_barbeiro(barbeiro_a_atualizar)
@@ -83,7 +132,7 @@ def atualizar_barbeiro(barbeiro_nome: str, barbeiro:Barbeiros):
     return barbeiro_a_atualizar
 
 @app.delete('/deleta_barbeiro/{barbeiro_nome}', response_model=Barbeiros, status_code=status.HTTP_200_OK)
-def deleta_barbeiro(barbeiro_nome: str):
+def deleta_barbeiro(barbeiro_nome: str, usuario= Depends(oauth2_scheme)):
     barbeiro_a_deletar = db.query(Barbeiro).filter(Barbeiro.nome == barbeiro_nome).first()
     
     validar_barbeiro_a_deletar(barbeiro_a_deletar)
@@ -97,9 +146,10 @@ def deleta_barbeiro(barbeiro_nome: str):
     
     return barbeiro_a_deletar
 
+#Metodos HTTP para o model Hora_Marcada
 
 @app.post('/cria_hora_marcada', response_model=Horario_Marcado, status_code=status.HTTP_201_CREATED)
-def cria_horario(hora_marcada:Horario_Marcado):
+def cria_horario(hora_marcada:Horario_Marcado, usuario= Depends(oauth2_scheme)):
     hora_marcada = Hora_Marcada(
         cliente = hora_marcada.cliente,
         horario = hora_marcada.horario.strftime('%Y-%m-%d %H:%M'),
@@ -122,7 +172,7 @@ def cria_horario(hora_marcada:Horario_Marcado):
     return hora_marcada
 
 @app.get('/hora_marcada', response_model=List[Horario_Marcado], status_code=status.HTTP_200_OK)
-def ver_horas_marcadas():
+def ver_horas_marcadas(usuario= Depends(oauth2_scheme)):
     horarios = db.query(Hora_Marcada).order_by(Hora_Marcada.horario.desc()).all()
     
     horario_existe(horarios)
@@ -130,7 +180,7 @@ def ver_horas_marcadas():
     return horarios
 
 @app.get('/hora_marcada/{cliente_nome}', response_model=List[Horario_Marcado], status_code=status.HTTP_200_OK)
-def ver_hora_marcada_do_cliente(cliente_nome: str):
+def ver_hora_marcada_do_cliente(cliente_nome: str, usuario= Depends(oauth2_scheme)):
     horario_do_cliente = db.query(Hora_Marcada).order_by(Hora_Marcada.horario.desc()).filter(Hora_Marcada.cliente == cliente_nome).all()
     
     valida_horario_do_cliente(horario_do_cliente)
@@ -139,7 +189,7 @@ def ver_hora_marcada_do_cliente(cliente_nome: str):
 
 
 @app.get('/hora_marcada_barbeiro/{barbeiro_nome}', response_model=List[Horario_Marcado], status_code=status.HTTP_200_OK)
-def ver_hora_marcado_do_barbeiro(barbeiro_nome: str):
+def ver_hora_marcado_do_barbeiro(barbeiro_nome: str, usuario= Depends(oauth2_scheme)):
     barbeiro = db.query(Barbeiro).filter(Barbeiro.nome == barbeiro_nome).first()
     
     valida_barbeiro(barbeiro)
@@ -151,7 +201,7 @@ def ver_hora_marcado_do_barbeiro(barbeiro_nome: str):
     return horario_do_barbeiro
 
 @app.put('/atualiza_horario/{cliente_nome}', response_model=Horario_Marcado, status_code=status.HTTP_200_OK)
-def atualizar_horario(cliente_nome: str,horario_marcado:Horario_Marcado):
+def atualizar_horario(cliente_nome: str,horario_marcado:Horario_Marcado, usuario= Depends(oauth2_scheme)):
     horario_a_atualizar = db.query(Hora_Marcada).order_by(Hora_Marcada.horario.desc()).filter(Hora_Marcada.cliente == cliente_nome).first()
     
     horario_existe(horario_a_atualizar)
@@ -173,7 +223,7 @@ def atualizar_horario(cliente_nome: str,horario_marcado:Horario_Marcado):
     return horario_a_atualizar
 
 @app.delete('/deletar_horario/{cliente_nome}/{horario}', response_model=Horario_Marcado, status_code=status.HTTP_200_OK)
-def deletar_horario(cliente_nome: str, horario: str):
+def deletar_horario(cliente_nome: str, horario: str, usuario= Depends(oauth2_scheme)):
     horario_a_deletar = db.query(Hora_Marcada).filter(Hora_Marcada.cliente == cliente_nome, Hora_Marcada.horario == horario ).first()
     
     validar_horario_a_deletar(horario_a_deletar)

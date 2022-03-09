@@ -18,10 +18,20 @@ class Barbeiro(Base):
     
 class Hora_Marcada(Base):
     __tablename__ = 'hora_marcada'
-    id= Column(Integer, primary_key=True)
+    id = Column(Integer, primary_key=True)
     cliente = Column(String(255), nullable=False)
     horario = Column(DateTime)
     barbeiro = Column(ForeignKey('barbeiro.id'), autoincrement=False)
     
     def __repr__(self):
         return f"Cliente:{self.cliente}, barbeiro:{self.barbeiro}, horario:{self.horario}"
+    
+class Usuario_Model(Base):
+    __tablename__ = 'usuario_model'
+    id = Column(Integer, primary_key=True)
+    usuario = Column(String(55), nullable=False, unique=True)
+    senha = Column(String(128))
+    
+    def vericar_senha(self, senha):
+        return self.senha == senha
+       
