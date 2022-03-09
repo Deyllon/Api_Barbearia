@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from typing import Optional, List
 from database.data import SessionLocal
 from database.models import Barbeiro, Hora_Marcada, Usuario_Model
-from validation import apagar_horarios, horario_existe, valida_horario,valida_barbeiro, valida_hora_marcada, valida_horario_do_cliente,valida_horario_do_barbeiro, validar_barbeiro_a_deletar, valida_criacao_barbeiro, valida_atualizacao_barbeiro, barbeiro_existe, validar_horario_a_deletar
+from validation import apagar_horarios, encontra_usuario, encontrou_usuario, horario_existe, usuario_existe, valida_horario,valida_barbeiro, valida_hora_marcada, valida_horario_do_cliente,valida_horario_do_barbeiro, validar_barbeiro_a_deletar, valida_criacao_barbeiro, valida_atualizacao_barbeiro, barbeiro_existe, validar_horario_a_deletar, verificar_senha
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 
 
@@ -49,10 +49,12 @@ db= SessionLocal()
     
 def autenticar_usuario(usuario: str, senha: str):
     db_usuario = db.query(Usuario_Model).filter(Usuario_Model.usuario == usuario).first()
-    if not db_usuario:
+
+    if usuario_existe(db_usuario) == None:
         return False
-    if not db_usuario.vericar_senha(senha):
+    if verificar_senha(db_usuario, senha) == False:
         return False
+    
     return db_usuario
 
 
@@ -60,10 +62,10 @@ def autenticar_usuario(usuario: str, senha: str):
 def gerar_token(formulario: OAuth2PasswordRequestForm = Depends()):
     usuario = autenticar_usuario(formulario.username, formulario.password)
     
-    if not usuario:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Usuario não encontrado')
+    encontra_usuario(usuario)
     
     token = usuario
+    
     return {"token_de_acesso": token, 'tipo_do_token': 'bearer'}
  
 #Metodo HTTP para o modelo Usuario
@@ -71,14 +73,17 @@ def gerar_token(formulario: OAuth2PasswordRequestForm = Depends()):
 @app.post('/cria_usuario', response_model=Usuario)
 def cria_usuario(usuario: Usuario):
     db_usuario = db.query(Usuario_Model).filter(Usuario_Model.usuario == usuario.usuario).first()
-    if not db_usuario is None:
-        raise HTTPException(status_code=400, detail='Usuario já existe')
+    
+    encontrou_usuario(db_usuario)
+    
     usuario = Usuario_Model(
         usuario = usuario.usuario,
         senha = usuario.senha
     )
+    
     db.add(usuario)
     db.commit()
+    
     return usuario
   
 #Metodos HTTP para o modelo Barbeiro

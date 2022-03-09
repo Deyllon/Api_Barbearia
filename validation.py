@@ -56,3 +56,17 @@ def apagar_horarios(horario_do_barbeiro):
     for horario in horario_do_barbeiro:
         db.delete(horario)
         db.commit()
+        
+def usuario_existe(db_usuario):
+    return db_usuario
+           
+def verificar_senha(db_usuario, senha):
+    return db_usuario.vericar_senha(senha)
+           
+def encontra_usuario(usuario):
+    if not usuario:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Usuario não encontrado')
+    
+def encontrou_usuario(db_usuario):
+    if not db_usuario is None:
+        raise HTTPException(status_code=400, detail='Usuario já existe')
